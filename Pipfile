@@ -7,12 +7,15 @@ name = "pypi"
 fastapi = "*"
 uvicorn = {extras = ["standard"], version = "*"}
 sqlmodel = "*"
-asyncpg = "*"
 python-dotenv = "*"
 openai = "*"
 pypdf = "*"
 langchain-text-splitters = "*"
 python-multipart = "*"
+asyncpg = "*"
+pydantic-settings = "*"
+pydantic-extra-types = "*"
+greenlet = "*"
 
 [dev-packages]
 pylint = "*"
