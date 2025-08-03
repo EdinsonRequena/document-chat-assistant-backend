@@ -1,0 +1,39 @@
+# ——— Python / FastAPI ———
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# ——— Entornos y dependencias ———
+# (Pipenv genera estos archivos; AÑADE el lock al repo)
+# Pipfile
+# Pipfile.lock
+
+# ——— Editors / IDE ———
+.vscode/
+.idea/
+*.code-workspace
+
+# ——— Dotenv ———
+.env
+.env.*
+*.env
+
+# ——— OS artefacts ———
+.DS_Store
+Thumbs.db
+
+# ——— Build ———
+dist/
+build/
+*.egg-info/
+*.log
+
+# ——— Docker overrides ———
+docker-compose.override.yml
+*.local.yml
