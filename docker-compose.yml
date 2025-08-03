@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: document_chat
+    ports: ["5432:5432"]
+
+  backend:
+    build: .
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/document_chat
+    depends_on: [db]
+    ports: ["8000:8000"]

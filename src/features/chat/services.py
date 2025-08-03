@@ -1,30 +1,34 @@
-from typing import AsyncIterator
-
+from typing import AsyncIterator, List
 from openai import AsyncOpenAI, RateLimitError
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from sqlmodel import select
-from models import DocumentChunk, Message, Conversation
 
 from core.settings import settings
+from models import (
+    DocumentChunk,
+    ConversationDocument,
+    Message,
+)
 
 client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-
 SYSTEM_PROMPT = (
-    "You are an assistant that answers questions about an uploaded document. "
-    "Use the provided context to answer briefly and accurately."
+    "You are an assistant that answers questions about user-uploaded documents "
+    "when available. If no document has been provided yet, answer generically "
+    "and suggest uploading one for better context."
 )
 
 
 async def fetch_context(
-    conversation_id: int, session: AsyncSession, limit: int = 15
-) -> list[str]:
+    conversation_id: int,
+    session: AsyncSession,
+    limit: int = 15
+) -> List[str]:
     stmt = (
         select(DocumentChunk.content)
         .join(DocumentChunk.document)
-        .join(Conversation)
-        .where(Conversation.id == conversation_id)
+        .join(ConversationDocument)
+        .where(ConversationDocument.conversation_id == conversation_id)
         .limit(limit)
     )
     result = await session.execute(stmt)
@@ -34,15 +38,21 @@ async def fetch_context(
 async def stream_answer(
     conversation_id: int,
     question: str,
-    session: AsyncSession,
+    session: AsyncSession
 ) -> AsyncIterator[str]:
     context_chunks = await fetch_context(conversation_id, session)
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "system", "content": "\n\n".join(context_chunks[:5])},
-        {"role": "user",   "content": question},
-    ]
+    if context_chunks:
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": "\n\n".join(context_chunks[:5])},
+            {"role": "user", "content": question},
+        ]
+    else:
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": question},
+        ]
 
     try:
         response = await client.chat.completions.create(
@@ -51,13 +61,11 @@ async def stream_answer(
             stream=False,
         )
         full_answer: str = response.choices[0].message.content
-
         yield full_answer
 
     except RateLimitError:
         full_answer = (
-            "Lo siento, la API está temporalmente saturada "
-            "y no puedo responder en este momento."
+            "Lo siento, la API está saturada. Intenta nuevamente en unos minutos."
         )
         yield full_answer
 
