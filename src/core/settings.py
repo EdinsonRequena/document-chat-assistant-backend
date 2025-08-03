@@ -1,15 +1,14 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     env: str = "dev"
-    database_url: str = (
-        "postgresql+asyncpg://postgres:postgres@localhost:5432/document_chat"
-    )
+    database_url: str
     openai_api_key: str | None = None
 
     class Config:
-        env_file = ".env"
+        env_file = Path(__file__).resolve().parents[2] / ".env"
         env_file_encoding = "utf-8"
 
 
