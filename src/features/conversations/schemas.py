@@ -2,6 +2,12 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class DocumentOut(BaseModel):
+    id: int
+    filename: str
+    uploaded_at: datetime
+
+
 class MessageOut(BaseModel):
     role: str
     content: str
@@ -10,6 +16,6 @@ class MessageOut(BaseModel):
 
 class ConversationOut(BaseModel):
     id: int
-    document_id: int
     created_at: datetime
+    documents: list[DocumentOut]
     messages: list[MessageOut]

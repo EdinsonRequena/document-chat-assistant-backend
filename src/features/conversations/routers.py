@@ -1,41 +1,56 @@
 from fastapi import APIRouter, Depends, HTTPException
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.deps import get_db_session
-from models import Conversation, Message
-from .schemas import ConversationOut, MessageOut
+from models import Conversation, ConversationDocument, Document, Message
+from .schemas import ConversationOut, DocumentOut, MessageOut
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
 @router.get("/{conv_id}", response_model=ConversationOut)
 async def get_conversation(
-    conv_id: int, session: AsyncSession = Depends(get_db_session)
+    conv_id: int,
+    session: AsyncSession = Depends(get_db_session),
 ):
     convo = await session.get(Conversation, conv_id)
-    if not convo:
+    if convo is None:
         raise HTTPException(404, "Conversation not found")
 
-    stmt = (
+    doc_stmt = (
+        select(Document)
+        .join(ConversationDocument)
+        .where(ConversationDocument.conversation_id == conv_id)
+    )
+    docs_res = await session.execute(doc_stmt)
+    docs = docs_res.scalars().all()
+
+    msg_stmt = (
         select(Message)
         .where(Message.conversation_id == conv_id)
         .order_by(Message.created_at)
     )
-    result = await session.execute(stmt)
-    messages = result.scalars().all()
+    msg_res = await session.execute(msg_stmt)
+    msgs = msg_res.scalars().all()
 
     return ConversationOut(
         id=convo.id,
-        document_id=convo.document_id,
         created_at=convo.created_at,
+        documents=[
+            DocumentOut(
+                id=d.id,
+                filename=d.filename,
+                uploaded_at=d.created_at,
+            )
+            for d in docs
+        ],
         messages=[
             MessageOut(
                 role=m.role,
                 content=m.content,
                 created_at=m.created_at,
             )
-            for m in messages
+            for m in msgs
         ],
     )
