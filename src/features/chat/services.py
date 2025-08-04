@@ -1,10 +1,13 @@
+import traceback
 from typing import AsyncIterator, List
+
 from openai import AsyncOpenAI, RateLimitError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.settings import settings
 from models import (
+    Document,
     DocumentChunk,
     ConversationDocument,
     Message,
@@ -22,13 +25,17 @@ SYSTEM_PROMPT = (
 async def fetch_context(
     conversation_id: int,
     session: AsyncSession,
-    limit: int = 15
+    limit: int = 15,
 ) -> List[str]:
     stmt = (
         select(DocumentChunk.content)
-        .join(DocumentChunk.document)
-        .join(ConversationDocument)
+        .join(Document, Document.id == DocumentChunk.document_id)
+        .join(
+            ConversationDocument,
+            ConversationDocument.document_id == Document.id,
+        )
         .where(ConversationDocument.conversation_id == conversation_id)
+        .order_by(DocumentChunk.id)
         .limit(limit)
     )
     result = await session.execute(stmt)
@@ -38,21 +45,18 @@ async def fetch_context(
 async def stream_answer(
     conversation_id: int,
     question: str,
-    session: AsyncSession
+    session: AsyncSession,
 ) -> AsyncIterator[str]:
+    print("-> stream_answer START")
     context_chunks = await fetch_context(conversation_id, session)
 
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+    ]
     if context_chunks:
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "system", "content": "\n\n".join(context_chunks[:5])},
-            {"role": "user", "content": question},
-        ]
-    else:
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": question},
-        ]
+        messages.append(
+            {"role": "system", "content": "\n\n".join(context_chunks[:5])})
+    messages.append({"role": "user", "content": question})
 
     try:
         response = await client.chat.completions.create(
@@ -61,7 +65,13 @@ async def stream_answer(
             stream=False,
         )
         full_answer: str = response.choices[0].message.content
+        print("-> stream_answer GOT:", full_answer[:60])
         yield full_answer
+
+    except Exception as exc:
+        traceback.print_exc()
+        yield "Error interno, inténtalo luego."
+        full_answer = "internal error"
 
     except RateLimitError:
         full_answer = (

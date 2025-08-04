@@ -1,6 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Query, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from sqlalchemy import select
 from core.deps import get_db_session
 from models import Conversation, ConversationDocument
 from .services import extract_text, split_into_chunks, persist
@@ -19,6 +19,7 @@ async def upload_document(
     ),
     session: AsyncSession = Depends(get_db_session),
 ):
+
     if conversation_id is not None:
         convo = await session.get(Conversation, conversation_id)
         if convo is None:
@@ -30,10 +31,19 @@ async def upload_document(
 
     raw_text = await extract_text(file)
     chunks = split_into_chunks(raw_text)
-    doc_id, _ = await persist(filename=file.filename, chunks=chunks, session=session)
+    doc_id = await persist(filename=file.filename, chunks=chunks, session=session)
 
-    link = ConversationDocument(conversation_id=convo.id, document_id=doc_id)
-    session.add(link)
+    exists = await session.execute(
+        select(ConversationDocument).where(
+            ConversationDocument.conversation_id == convo.id,
+            ConversationDocument.document_id == doc_id,
+        )
+    )
+    if not exists.scalar_one_or_none():
+        session.add(
+            ConversationDocument(conversation_id=convo.id, document_id=doc_id)
+        )
+
     await session.commit()
 
     return UploadResponse(
