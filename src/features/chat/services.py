@@ -1,5 +1,6 @@
 import traceback
-from typing import AsyncIterator, List
+from itertools import zip_longest
+from typing import AsyncIterator
 
 from openai import AsyncOpenAI, RateLimitError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,24 +23,54 @@ SYSTEM_PROMPT = (
 )
 
 
+def interleave(chunks_lists: list[list[str]]) -> list[str]:
+    return [c for tup in zip_longest(*chunks_lists) for c in tup if c]
+
+
+async def recent_doc_ids(
+    conversation_id: int,
+    session: AsyncSession,
+    max_docs: int = 3,
+) -> list[int]:
+    stmt = (
+        select(ConversationDocument.document_id)
+        .where(ConversationDocument.conversation_id == conversation_id)
+        .order_by(ConversationDocument.document_id.desc())
+        .limit(max_docs)
+    )
+    res = await session.execute(stmt)
+    return [row[0] for row in res]
+
+
 async def fetch_context(
     conversation_id: int,
     session: AsyncSession,
-    limit: int = 15,
-) -> List[str]:
-    stmt = (
-        select(DocumentChunk.content)
-        .join(Document, Document.id == DocumentChunk.document_id)
-        .join(
-            ConversationDocument,
-            ConversationDocument.document_id == Document.id,
+    chunk_budget: int = 100,
+    recent_docs: int = 3,
+) -> list[str]:
+    doc_ids = await recent_doc_ids(conversation_id, session, recent_docs)
+    if not doc_ids:
+        return []
+
+    per_doc = max(1, chunk_budget // len(doc_ids))
+
+    full_blocks: list[str] = []
+    for doc_id in doc_ids:
+        title_stmt = select(Document.filename).where(Document.id == doc_id)
+        filename = (await session.scalar(title_stmt)) or f"Doc {doc_id}"
+
+        chunks_stmt = (
+            select(DocumentChunk.content)
+            .where(DocumentChunk.document_id == doc_id)
+            .order_by(DocumentChunk.id)
+            .limit(per_doc)
         )
-        .where(ConversationDocument.conversation_id == conversation_id)
-        .order_by(DocumentChunk.id)
-        .limit(limit)
-    )
-    result = await session.execute(stmt)
-    return result.scalars().all()
+        chunks = (await session.scalars(chunks_stmt)).all()
+
+        full_blocks.append(f"### {filename}\n" + "\n".join(chunks))
+
+    joined = "\n\n".join(full_blocks)
+    return joined.splitlines()[:chunk_budget]
 
 
 async def stream_answer(
@@ -55,12 +86,12 @@ async def stream_answer(
     ]
     if context_chunks:
         messages.append(
-            {"role": "system", "content": "\n\n".join(context_chunks[:5])})
+            {"role": "system", "content": "\n\n".join(context_chunks)})
     messages.append({"role": "user", "content": question})
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-3.5-turbo-16k",
             messages=messages,
             stream=False,
         )
