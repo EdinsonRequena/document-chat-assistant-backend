@@ -16,6 +16,8 @@ asyncpg = "*"
 pydantic-settings = "*"
 pydantic-extra-types = "*"
 greenlet = "*"
+pylint-pydantic = "*"
+pylint-sqlalchemy = "*"
 
 [dev-packages]
 pylint = "*"
