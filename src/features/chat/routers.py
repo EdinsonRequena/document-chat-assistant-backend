@@ -62,6 +62,6 @@ async def create_conversation(
     """
     convo = Conversation()
     session.add(convo)
-    await session.commit()          # ← guarda y refresca
+    await session.commit()
     await session.refresh(convo)
     return {"conversation_id": convo.id}
