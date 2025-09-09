@@ -26,6 +26,11 @@ app.include_router(upload_router)
 app.include_router(conversations_router)
 
 
+@app.get("/", tags=["meta"])
+async def root():
+    return {"status": "ok", "service": "document-chat-assistant"}
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
     await init_db()
