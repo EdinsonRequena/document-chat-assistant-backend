@@ -10,16 +10,19 @@ from features.conversations.routers import router as conversations_router
 app = FastAPI(title="Document Chat Assistant Backend")
 
 allow_all = settings.allowed_origins.strip() == "*"
-origins = ["*"] if allow_all else [o.strip()
-                                   for o in settings.allowed_origins.split(",") if o.strip()]
+origins = (
+    ["*"] if allow_all
+    else [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_credentials=False if allow_all else True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 app.include_router(chat_router)
 app.include_router(upload_router)
